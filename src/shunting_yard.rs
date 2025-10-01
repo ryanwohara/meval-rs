@@ -6,9 +6,9 @@
 //!
 //! [RPN]: https://en.wikipedia.org/wiki/Reverse_Polish_notation
 //! [shunting]: https://en.wikipedia.org/wiki/Shunting-yard_algorithm
+use crate::tokenizer::Token;
 use std;
 use std::fmt;
-use tokenizer::Token;
 
 #[derive(Debug, Clone, Copy)]
 enum Associativity {
@@ -65,8 +65,9 @@ impl std::error::Error for RPNError {
 /// Returns the operator precedence and associativity for a given token.
 fn prec_assoc(token: &Token) -> (u32, Associativity) {
     use self::Associativity::*;
-    use tokenizer::Operation::*;
-    use tokenizer::Token::*;
+    use crate::tokenizer::Operation::*;
+    use crate::tokenizer::Token::*;
+
     match *token {
         Binary(op) => match op {
             Plus | Minus => (1, Left),
@@ -89,7 +90,7 @@ fn prec_assoc(token: &Token) -> (u32, Associativity) {
 ///
 /// Returns `Err` if the input expression is not well-formed.
 pub fn to_rpn(input: &[Token]) -> Result<Vec<Token>, RPNError> {
-    use tokenizer::Token::*;
+    use crate::tokenizer::Token::*;
 
     let mut output = Vec::with_capacity(input.len());
     let mut stack = Vec::with_capacity(input.len());
@@ -164,7 +165,9 @@ pub fn to_rpn(input: &[Token]) -> Result<Vec<Token>, RPNError> {
     while let Some((index, token)) = stack.pop() {
         match token {
             Unary(_) | Binary(_) => output.push(token),
-            LParen | Func(..) => return Err(RPNError::MismatchedLParen(index)),
+            crate::tokenizer::Token::LParen | Func(..) => {
+                return Err(RPNError::MismatchedLParen(index));
+            }
             _ => panic!("Unexpected token on stack."),
         }
     }
@@ -195,8 +198,8 @@ pub fn to_rpn(input: &[Token]) -> Result<Vec<Token>, RPNError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokenizer::Operation::*;
-    use tokenizer::Token::*;
+    use crate::tokenizer::Operation::*;
+    use crate::tokenizer::Token::*;
 
     #[test]
     fn test_to_rpn() {

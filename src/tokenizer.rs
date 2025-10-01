@@ -6,6 +6,7 @@
 //!
 //! [nom]: https://crates.io/crates/nom
 
+use crate::nom::Parser;
 use nom::{
     branch::alt,
     bytes::complete::is_a,
@@ -131,20 +132,20 @@ fn binop<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
 }
 
 fn lparen<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    map(tag("("), |_: &str| Token::LParen)(i)
+    map(tag("("), |_: &str| Token::LParen).parse(i)
 }
 
 fn rparen<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    map(tag(")"), |_: &str| Token::RParen)(i)
+    map(tag(")"), |_: &str| Token::RParen).parse(i)
 }
 
 fn comma<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    map(tag(","), |_: &str| Token::Comma)(i)
+    map(tag(","), |_: &str| Token::Comma).parse(i)
 }
 
 /// negpos parse. detects either - or +
 fn negpos_s<'a>(i: &'a str) -> IResult<&'a str, &'a str, (&'a str, ErrorKind)> {
-    match alt((tag("+"), tag("-")))(i) {
+    match alt((tag("+"), tag("-"))).parse(i) {
         Ok((remaining_input, operator)) => Ok((remaining_input, operator)),
         Err(e) => Err(e),
     }
@@ -164,7 +165,7 @@ fn negpos<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
 
 /// factorial parse
 fn fact<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    map(tag("!"), |_s: &str| Token::Unary(Operation::Fact))(i)
+    map(tag("!"), |_s: &str| Token::Unary(Operation::Fact)).parse(i)
 }
 
 fn ident<'a>(i: &'a str) -> IResult<&'a str, &'a str, (&'a str, ErrorKind)> {
@@ -181,11 +182,11 @@ fn ident<'a>(i: &'a str) -> IResult<&'a str, &'a str, (&'a str, ErrorKind)> {
             // Parses the longest slice consisting of the given characters
             opt(is_a(remaining_chars)),
         ),
-    )(i)
+    ).parse(i)
 }
 
 fn var<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    map(complete(ident), |s: &str| Token::Var(s.into()))(i)
+    map(complete(ident), |s: &str| Token::Var(s.into())).parse(i)
 }
 
 /// Parse `func(`, returns `func`.
@@ -194,11 +195,11 @@ fn func<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
         //recognize(
         terminated(complete(ident), preceded(multispace0, complete(tag("(")))), //)
         |s: &str| Token::Func(s.into(), None),
-    )(i)
+    ).parse(i)
 }
 
 fn number<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    preceded(peek(one_of("0123456789")), map(double, Token::Number))(i)
+    preceded(peek(one_of("0123456789")), map(double, Token::Number)).parse(i)
 }
 
 fn lexpr<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
@@ -206,19 +207,19 @@ fn lexpr<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
         multispace0,
         alt((number, func, var, negpos, lparen)),
         multispace0,
-    )(i)
+    ).parse(i)
 }
 
 fn after_rexpr<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    delimited(multispace0, alt((fact, binop, rparen)), multispace0)(i)
+    delimited(multispace0, alt((fact, binop, rparen)), multispace0).parse(i)
 }
 
 fn after_rexpr_no_paren<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    delimited(multispace0, alt((fact, binop)), multispace0)(i)
+    delimited(multispace0, alt((fact, binop)), multispace0).parse(i)
 }
 
 fn after_rexpr_comma<'a>(i: &'a str) -> IResult<&'a str, Token, (&'a str, ErrorKind)> {
-    delimited(multispace0, alt((fact, binop, rparen, comma)), multispace0)(i)
+    delimited(multispace0, alt((fact, binop, rparen, comma)), multispace0).parse(i)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -291,16 +292,6 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, TokenParseError> {
                 }
 
                 return Err(TokenParseError::UnknownError);
-            }
-            // Error(Err::Position(_, p)) => {
-            //     let (i, _) = slice_to_offsets(input, p);
-            //     return Err(TokenParseError::UnexpectedToken(i));
-            // }
-            _ => {
-                panic!(
-                    "Unexpected parse result when parsing `{}` at `{}`: {:?}",
-                    input, s, r
-                );
             }
         }
     }
