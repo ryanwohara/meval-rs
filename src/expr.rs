@@ -1006,7 +1006,7 @@ pub mod de {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use de::as_f64;
+        use crate::de::as_f64;
         use serde_json;
         use serde_test;
         #[test]
