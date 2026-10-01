@@ -285,7 +285,8 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, TokenParseError> {
             }
             Err(e) => {
                 match e {
-                    Err::Error((value, _)) => {
+                    // `double` reports malformed exponents (e.g. `1e+`) as `Failure`
+                    Err::Error((value, _)) | Err::Failure((value, _)) => {
                         return Err(TokenParseError::UnexpectedStrToken(value.to_string()));
                     }
                     _ => (),
@@ -345,21 +346,25 @@ mod tests {
         assert_eq!(rparen(")"), Ok(("", Token::RParen)));
         assert_eq!(comma(","), Ok(("", Token::Comma)));
         assert_eq!(comma(","), Ok(("", Token::Comma)));
-        assert_eq!(number("+1.34e2"), Ok(("", Token::Number(134.0))));
-        assert_eq!(number("+1.34e+2"), Ok(("", Token::Number(134.0))));
+        assert_eq!(number("1.34e2"), Ok(("", Token::Number(134.0))));
+        assert_eq!(number("1.34e+2"), Ok(("", Token::Number(134.0))));
         assert_eq!(number("3E+2"), Ok(("", Token::Number(300.0))));
-        assert_eq!(number("+4E+2"), Ok(("", Token::Number(400.0))));
-        assert_eq!(number("-4.76E+2"), Ok(("", Token::Number(-476.0))));
-        assert_eq!(number("-4.76"), Ok(("", Token::Number(-4.76))));
-        assert_eq!(number("+4.76"), Ok(("", Token::Number(4.76))));
+        assert_eq!(number("4.76E+2"), Ok(("", Token::Number(476.0))));
+        assert_eq!(number("4.76"), Ok(("", Token::Number(4.76))));
         assert_eq!(number("1.1"), Ok(("", Token::Number(1.1))));
-        assert_eq!(number("-1.1"), Ok(("", Token::Number(-1.1))));
         assert_eq!(number("123E-02"), Ok(("", Token::Number(1.23))));
-        assert_eq!(number("+123E-02"), Ok(("", Token::Number(1.23))));
-        assert_eq!(number("-123E-02"), Ok(("", Token::Number(-1.23))));
+        // signs are tokenized separately as `Unary` operations
+        assert_eq!(
+            number("+1.34e2"),
+            Err(Err::Error(("+1.34e2", nom::error::ErrorKind::OneOf)))
+        );
+        assert_eq!(
+            number("-4.76"),
+            Err(Err::Error(("-4.76", nom::error::ErrorKind::OneOf)))
+        );
         assert_eq!(
             number("abc"),
-            Err(Err::Error(("abc", nom::error::ErrorKind::Float)))
+            Err(Err::Error(("abc", nom::error::ErrorKind::OneOf)))
         );
     }
 
@@ -368,7 +373,7 @@ mod tests {
         // number, func, var, negpos, lparen
         assert_eq!(
             number("a"),
-            Err(Err::Error(("a", nom::error::ErrorKind::Float)))
+            Err(Err::Error(("a", nom::error::ErrorKind::OneOf)))
         );
 
         assert_eq!(func("a"), Err(Err::Error(("", nom::error::ErrorKind::Tag))));
@@ -381,11 +386,9 @@ mod tests {
 
         assert_eq!(lexpr("2 +(3--2) "), Ok(("+(3--2) ", Token::Number(2.0))));
 
-        println!("{:?}", number("+(3--2) "));
-
         assert_eq!(
             lexpr("+(3--2) "),
-            Ok(("+(3--2) ", Token::Binary(Operation::Plus)))
+            Ok(("(3--2) ", Token::Unary(Operation::Plus)))
         );
     }
 
@@ -448,26 +451,13 @@ mod tests {
             number("e"),
             Err(Err::Error(("e", nom::error::ErrorKind::OneOf)))
         );
-        assert_eq!(
-            number("1E"),
-            Err(Err::Error(("E", nom::error::ErrorKind::Eof)))
-        );
-        assert_eq!(
-            number("1e"),
-            Err(Err::Error(("e", nom::error::ErrorKind::Eof)))
-        );
-        assert_eq!(
-            number("1e+"),
-            Err(Err::Error(("+", nom::error::ErrorKind::Eof)))
-        );
-        assert_eq!(
-            number("1e+-?%"),
-            Err(Err::Error(("-?%", nom::error::ErrorKind::Eof)))
-        );
-        assert_eq!(
-            number("2+"),
-            Err(Err::Error(("+", nom::error::ErrorKind::Eof)))
-        );
+        for &s in ["1E", "1e", "1e+", "1e+-?%"].iter() {
+            assert_eq!(
+                number(s),
+                Err(Err::Failure((s, nom::error::ErrorKind::Float)))
+            );
+        }
+        assert_eq!(number("2+"), Ok(("+", Token::Number(2.0))));
     }
 
     #[test]
@@ -587,6 +577,11 @@ mod tests {
         assert_eq!(
             tokenize("()"),
             Err(TokenParseError::UnexpectedStrToken(")".to_string()))
+        );
+
+        assert_eq!(
+            tokenize("2*1e+"),
+            Err(TokenParseError::UnexpectedStrToken("1e+".to_string()))
         );
 
         assert_eq!(tokenize(""), Err(TokenParseError::MissingArgument));
